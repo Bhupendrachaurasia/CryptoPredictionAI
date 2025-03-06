@@ -10,7 +10,7 @@ app = Flask(__name__)
 # ============================
 
 try:
-    # Ensure data file exists
+    # Ensure historical data exists
     if not os.path.exists("data/btc_historical_data.csv"):
         raise FileNotFoundError("btc_historical_data.csv not found!")
 
@@ -20,9 +20,11 @@ try:
     # Convert timestamps to Unix format if needed
     if isinstance(df["timestamp"].iloc[0], str):  # Check if timestamps are strings (dates)
         df["timestamp"] = pd.to_datetime(df["timestamp"])  # Convert to datetime
-        df["timestamp"] = df["timestamp"].astype('int64') // 10**9  # ✅ Fixed: Convert to Unix timestamps
+        df["timestamp"] = df["timestamp"].astype('int64') // 10**9  # ✅ Convert to Unix timestamps
 
     print("📂 Loading predicted prices...")
+    
+    # ✅ Load `predicted_prices.npy` from the main folder, not `data/`
     if not os.path.exists("predicted_prices.npy"):
         raise FileNotFoundError("predicted_prices.npy not found! Run train_model.py to generate predictions.")
 
