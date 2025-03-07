@@ -1,65 +1,63 @@
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+import requests
 
-# ==============================
-# LOAD PREPROCESSED DATA
-# ==============================
-data = np.load("data/processed_data.npy")
+# 📌 Fetch 1-minute BTC price data
+def fetch_minute_data():
+    url = "https://api.binance.com/api/v3/klines"
+    params = {"symbol": "BTCUSDT", "interval": "1m", "limit": 500}
+    response = requests.get(url, params=params)
 
-# Define sequence length (Using 50 previous steps)
-sequence_length = 50
+    if response.status_code == 200:
+        data = response.json()
+        return pd.DataFrame({
+            "timestamp": [entry[0] for entry in data],
+            "close": [float(entry[4]) for entry in data],  # ✅ Use only close price
+        })
+    return None
 
-# Prepare dataset for LSTM (Convert to sequences)
-X, y = [], []
-for i in range(len(data) - sequence_length):
-    X.append(data[i:i+sequence_length])  # Use last 50 steps
-    y.append(data[i+sequence_length, 0])  # Predict next price
+# 📂 Load & preprocess data
+data = fetch_minute_data()
+if data is not None:
+    data["timestamp"] = pd.to_datetime(data["timestamp"], unit="ms")
+    data.to_csv("data/btc_minute_data.csv", index=False)
+else:
+    print("❌ Failed to fetch BTC data")
 
-X, y = np.array(X), np.array(y)
+# 📌 Use only the "close" column
+prices = data["close"].values.reshape(-1, 1)
 
-# Split into training and testing sets (80% train, 20% test)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+# ✅ Fix: Train MinMaxScaler on only 1 feature (close price)
+scaler = MinMaxScaler(feature_range=(0, 1))
+prices_scaled = scaler.fit_transform(prices)
 
-# ==============================
-# BUILD LSTM MODEL (IMPROVED)
-# ==============================
+# Prepare training data
+X_train, y_train = [], []
+for i in range(30, len(prices_scaled)):
+    X_train.append(prices_scaled[i-30:i])
+    y_train.append(prices_scaled[i])
 
+X_train, y_train = np.array(X_train), np.array(y_train)
+
+# Build LSTM Model
 model = Sequential([
-    LSTM(256, return_sequences=True, activation="tanh", input_shape=(sequence_length, X.shape[2])),
-    Dropout(0.1),
-    LSTM(128, return_sequences=True, activation="tanh"),
-    Dropout(0.1),
-    LSTM(64, return_sequences=False, activation="tanh"),
-    Dense(32, activation="relu"),
-    Dense(1)  # Predict the next price
+    LSTM(64, return_sequences=True, input_shape=(30, 1)),  # ✅ Fix: Match input shape
+    Dropout(0.2),
+    LSTM(64, return_sequences=False),
+    Dropout(0.2),
+    Dense(32),
+    Dense(1)
 ])
+model.compile(optimizer="adam", loss="mean_squared_error")
 
-# Compile with lower learning rate for better accuracy
-model.compile(optimizer=Adam(learning_rate=0.00005), loss="mse")
+# Train the Model
+model.fit(X_train, y_train, epochs=100, batch_size=16)
 
-# ==============================
-# TRAINING MODEL
-# ==============================
-
-print("🔄 Training LSTM model...")
-history = model.fit(X_train, y_train, epochs=250, batch_size=16, validation_data=(X_test, y_test))
-
-# Save trained model
-model.save("models/lstm_model.h5")
-print("✅ Model training complete! Saved as 'models/lstm_model.h5'.")
-
-# ==============================
-# GENERATE PREDICTIONS
-# ==============================
-
-# Generate predictions
-predicted_prices = model.predict(X_test)
-
-# Save predicted prices
-np.save("predicted_prices.npy", predicted_prices)
-
-print("📊 Predictions saved as 'predicted_prices.npy'.")
+# ✅ Save the Model & Scaler (now using only 1 feature)
+model.save("model.h5")
+np.save("scaler.npy", scaler)
+print("✅ Model Training Completed & Saved!")

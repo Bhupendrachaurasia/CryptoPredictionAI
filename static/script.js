@@ -1,65 +1,94 @@
-async function fetchPredictions() {
-    const response = await fetch('/predict');
-    const data = await response.json();
+document.addEventListener("DOMContentLoaded", function () {
+    const ctx = document.getElementById("btc-chart").getContext("2d");
+    let btcChart;
+    let labels = []; // Shared time labels for actual & predicted prices
+    let actualPrices = []; // Live BTC prices (blue line)
+    let predictedPrices = []; // Predicted BTC prices (red line)
 
-    // Extract timestamps and predictions
-    const timestamps = data.map(item => new Date(item.timestamp * 1000)); // Convert Unix timestamp to JS date
-    const predictedPrices = data.map(item => item.predicted);
+    function fetchAndUpdateData() {
+        Promise.all([
+            fetch("/api/live").then((res) => res.json()),
+            fetch("/api/predict").then((res) => res.json()),
+        ])
+        .then(([liveData, predictedData]) => {
+            const currentTime = new Date();
+            const nextMinuteTime = new Date(currentTime.getTime() + 60000); // 1 min ahead
 
-    // Shift predictions ahead by adding future timestamps
-    const futureTimestamps = timestamps.map(t => new Date(t.getTime() + 5 * 60 * 1000)); // Add 5 minutes to each
-
-    updateChart(timestamps, futureTimestamps, predictedPrices);
-}
-
-function updateChart(actualTimestamps, futureTimestamps, predictedPrices) {
-    const ctx = document.getElementById('priceChart').getContext('2d');
-
-    const chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: actualTimestamps.concat(futureTimestamps), // Combine timestamps
-            datasets: [
-                {
-                    label: 'Actual Price',
-                    data: [], // Will be filled later
-                    borderColor: 'blue',
-                    borderWidth: 2,
-                    fill: false
-                },
-                {
-                    label: 'Predicted Price',
-                    data: predictedPrices,
-                    borderColor: 'red',
-                    borderWidth: 2,
-                    fill: false,
-                    pointRadius: 0, // Hide points for smoothness
-                    borderDash: [5, 5] // Make prediction line dashed
+            if (liveData.current_price) {
+                document.getElementById("current-price").innerText = `Current BTC Price: $${liveData.current_price.toFixed(2)}`;
+                
+                // ✅ Ensure no duplicate timestamps
+                if (!labels.includes(currentTime.toLocaleTimeString())) {
+                    labels.push(currentTime.toLocaleTimeString()); // Blue line timestamps
+                    actualPrices.push(liveData.current_price);
+                    predictedPrices.push(null); // Keep prediction empty at actual timestamps
                 }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: { type: 'time', time: { unit: 'minute' } },
-                y: { beginAtZero: false }
             }
+
+            if (predictedData.predicted_price) {
+                document.getElementById("predicted-price").innerText = `Predicted BTC Price (Next Minute): $${predictedData.predicted_price.toFixed(2)}`;
+
+                // ✅ Ensure predictions extend smoothly forward, not reset
+                if (!labels.includes(nextMinuteTime.toLocaleTimeString())) {
+                    labels.push(nextMinuteTime.toLocaleTimeString()); // Red line timestamps (1 min ahead)
+                    actualPrices.push(null); // Keep actual price empty for predicted time
+                    predictedPrices.push(predictedData.predicted_price);
+                }
+            }
+
+            updateChart();
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+    }
+
+    function updateChart() {
+        if (labels.length > 20) {
+            labels.shift(); // ✅ Keep last 20 points to maintain smooth graph updates
+            actualPrices.shift();
+            predictedPrices.shift();
         }
-    });
 
-    // Fetch actual prices separately
-    fetchActualPrices(chart);
-}
+        if (btcChart) btcChart.destroy(); // ✅ Remove old chart before updating
 
-async function fetchActualPrices(chart) {
-    const response = await fetch('/actual'); // Assuming you have an API for actual prices
-    const data = await response.json();
+        btcChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: labels, // ✅ Keep a single continuous timeline
+                datasets: [
+                    {
+                        label: "Live BTC Price",
+                        data: actualPrices,
+                        borderColor: "blue",
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
+                        pointStyle: "circle",
+                        pointRadius: 4,
+                        spanGaps: true,
+                    },
+                    {
+                        label: "Predicted BTC Price (Next 1 min)",
+                        data: predictedPrices,
+                        borderColor: "red",
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
+                        borderDash: [5, 5], // Dashed line for prediction
+                        pointStyle: "circle",
+                        pointRadius: 4,
+                        spanGaps: true,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { display: true },
+                    y: { display: true },
+                },
+            },
+        });
+    }
 
-    const actualPrices = data.map(item => item.price);
-    chart.data.datasets[0].data = actualPrices;
-    chart.update();
-}
-
-// Fetch predictions and update chart every minute
-fetchPredictions();
-setInterval(fetchPredictions, 60000);
+    fetchAndUpdateData();
+    setInterval(fetchAndUpdateData, 60000); // ✅ Auto-refresh every 1 min
+});

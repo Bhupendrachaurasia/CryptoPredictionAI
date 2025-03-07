@@ -1,72 +1,55 @@
-from flask import Flask, jsonify
+from flask import Flask, render_template, jsonify
+import requests
 import numpy as np
-import pandas as pd
-import os
+import tensorflow as tf
 
 app = Flask(__name__)
 
-# ============================
-# ✅ Load Data (Safely)
-# ============================
+BINANCE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
 
-try:
-    # Ensure historical data exists
-    if not os.path.exists("data/btc_historical_data.csv"):
-        raise FileNotFoundError("btc_historical_data.csv not found!")
+# 📌 Function to fetch live BTC price
+def get_live_btc_price():
+    response = requests.get(BINANCE_URL)
+    if response.status_code == 200:
+        return float(response.json()["price"])  # Convert string to float
+    return None
 
-    print("📂 Loading historical data...")
-    df = pd.read_csv("data/btc_historical_data.csv")
+# 📌 Function to predict next 1-minute BTC price
+def predict_next_minute_price(current_price):
+    model = tf.keras.models.load_model("model.h5")  # Load trained model
+    scaler = np.load("scaler.npy", allow_pickle=True).item()  # Load scaler
 
-    # Convert timestamps to Unix format if needed
-    if isinstance(df["timestamp"].iloc[0], str):  # Check if timestamps are strings (dates)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])  # Convert to datetime
-        df["timestamp"] = df["timestamp"].astype('int64') // 10**9  # ✅ Convert to Unix timestamps
+    # Normalize the current price
+    current_price_scaled = scaler.transform(np.array([[current_price]]))
 
-    print("📂 Loading predicted prices...")
-    
-    # ✅ Load `predicted_prices.npy` from the main folder, not `data/`
-    if not os.path.exists("predicted_prices.npy"):
-        raise FileNotFoundError("predicted_prices.npy not found! Run train_model.py to generate predictions.")
+    # Predict next price
+    predicted_scaled = model.predict(np.array([[current_price_scaled]]))
+    predicted_price = scaler.inverse_transform(predicted_scaled)[0][0]
 
-    predicted_prices = np.load("predicted_prices.npy")
+    return float(predicted_price)  # ✅ Convert to standard Python float
 
-    # Match timestamps with predictions
-    timestamps = df["timestamp"].values[-len(predicted_prices):]
+# 📌 API to Get Live BTC Price
+@app.route("/api/live")
+def live_btc_price():
+    current_price = get_live_btc_price()
+    if current_price:
+        return jsonify({"current_price": float(current_price)})  # ✅ Ensure it's a Python float
+    return jsonify({"error": "Failed to fetch live BTC price"}), 500
 
-    print("✅ Data loaded successfully!")
-except Exception as e:
-    print("❌ Error loading data:", e)
-    predicted_prices = []
-    timestamps = []
+# 📌 API to Get Predicted BTC Price (1 Minute Ahead)
+@app.route("/api/predict")
+def predict_btc_price():
+    current_price = get_live_btc_price()
+    if current_price:
+        predicted_price = predict_next_minute_price(current_price)
+        return jsonify({"predicted_price": float(predicted_price)})  # ✅ Convert to standard Python float
+    return jsonify({"error": "Failed to fetch live BTC price"}), 500
 
-# ============================
-# ✅ Flask API Routes
-# ============================
+# 📌 Homepage Route
+@app.route("/")
+def home():
+    return render_template("index.html")
 
-@app.route('/predict')
-def predict():
-    try:
-        if len(predicted_prices) == 0:
-            return jsonify({"error": "No predictions available"}), 500
-
-        data = [{"timestamp": int(timestamps[i]), "predicted": float(predicted_prices[i][0])} for i in range(len(predicted_prices))]
-        return jsonify(data)
-    except Exception as e:
-        print("❌ Error in /predict:", e)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/actual')
-def actual():
-    try:
-        actual_prices = df[["timestamp", "close"]].tail(len(predicted_prices)).to_dict(orient="records")
-        return jsonify(actual_prices)
-    except Exception as e:
-        print("❌ Error in /actual:", e)
-        return jsonify({"error": str(e)}), 500
-
-# ============================
-# ✅ Run Flask App
-# ============================
-
-if __name__ == '__main__':
+# 🚀 Run Flask App
+if __name__ == "__main__":
     app.run(debug=True)

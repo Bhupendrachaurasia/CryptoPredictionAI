@@ -5,170 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Prediction AI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/static/script.js" defer></script>
     <style>
-        /* Global Styles */
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: #121212;
-            color: white;
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
             margin: 0;
             padding: 20px;
         }
-
-        /* Fancy Header */
-        .header {
-            font-size: 42px;
-            font-weight: bold;
-            text-transform: uppercase;
-            color: #f39c12;
-            text-shadow: 3px 3px 10px rgba(255, 165, 0, 0.7);
-            letter-spacing: 2px;
-            margin-bottom: 5px;
-        }
-
-        .subtext {
-            font-size: 18px;
-            color: #bbb;
-            margin-bottom: 20px;
-        }
-
-        /* Price Display */
-        .price-box {
-            font-size: 22px;
-            color: #fff;
-            font-weight: bold;
-        }
-
-        .prediction {
-            font-size: 24px;
-            color: #2ecc71;
-            font-weight: bold;
-        }
-
-        /* Chart Styling */
         .chart-container {
-            width: 90vw;
-            max-width: 800px;
-            height: 50vh;
+            width: 90%; 
+            max-width: 800px; 
+            height: 400px; 
             margin: auto;
+            overflow: hidden; /* Prevent scrolling */
         }
-
-        /* Timeframe Selection */
-        .timeframe-container {
-            margin-top: 10px;
-        }
-
-        select {
-            padding: 5px;
-            font-size: 16px;
-            background-color: #333;
-            color: white;
-            border: 1px solid #f39c12;
-            border-radius: 5px;
-            cursor: pointer;
+        canvas { 
+            display: block; 
+            max-width: 100%; 
+            height: 100%;
         }
     </style>
 </head>
 <body>
-    <!-- Fancy Header -->
-    <h1 class="header">Crypto Prediction AI</h1>
-    <p class="subtext">Your AI-Powered Bitcoin Forecasting Tool</p>
-
-    <!-- Real-Time & Predicted Prices -->
-    <p>Real-Time BTC Price: <span id="real-time-price" class="price-box">Loading...</span></p>
-    <p>Predicted BTC Price for Next Movement:</p>
-    <p id="predicted-price" class="prediction">Loading...</p>
-
-    <!-- Timeframe Selection -->
-    <div class="timeframe-container">
-        <h2>Price Trend</h2>
-        <label for="timeframe">Select Timeframe:</label>
-        <select id="timeframe">
-            <option value="5m">5 Minutes</option>
-            <option value="15m">15 Minutes</option>
-            <option value="1h">1 Hour</option>
-            <option value="5h">5 Hours</option>
-            <option value="24h" selected>Last 24 Hours</option>
-            <option value="1M">1 Month</option>
-            <option value="1D">Daily Candle</option>
-        </select>
-    </div>
-
-    <!-- Chart -->
+    <h1>Crypto Prediction AI</h1>
+    <h2 id="current-price">Loading Current BTC Price...</h2>
+    <h2 id="predicted-price">Loading Predicted BTC Price...</h2>
+    
     <div class="chart-container">
-        <canvas id="btcChart"></canvas>
+        <canvas id="btc-chart"></canvas>
     </div>
-
-    <script>
-        let realPriceHistory = [];
-        let predictedPriceHistory = [];
-        let timeLabels = [];
-        let chart;
-
-        function updateData() {
-            $.getJSON('/api/prediction', function(data) {
-                $("#real-time-price").text("$ " + data.real_time_price);
-                $("#predicted-price").text("$ " + data.predicted_price);
-
-                let now = new Date().toLocaleTimeString();
-                timeLabels.push(now);
-                realPriceHistory.push(data.real_time_price);
-                predictedPriceHistory.push(data.predicted_price);
-
-                if (realPriceHistory.length > 20) {
-                    timeLabels.shift();
-                    realPriceHistory.shift();
-                    predictedPriceHistory.shift();
-                }
-
-                chart.update();
-            });
-        }
-
-        $(document).ready(function() {
-            let ctx = document.getElementById('btcChart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: timeLabels,
-                    datasets: [
-                        {
-                            label: 'Real-Time BTC Price',
-                            data: realPriceHistory,
-                            borderColor: 'blue',
-                            borderWidth: 2,
-                            pointRadius: 2,
-                            fill: false
-                        },
-                        {
-                            label: 'Predicted BTC Price',
-                            data: predictedPriceHistory,
-                            borderColor: 'red',
-                            borderWidth: 2,
-                            pointRadius: 2,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { display: true },
-                        y: { display: true }
-                    }
-                }
-            });
-
-            updateData();
-            setInterval(updateData, 60000);
-
-            $("#timeframe").change(function() {
-                alert("Feature not implemented yet. It will be added soon!");
-            });
-        });
-    </script>
 </body>
 </html>
