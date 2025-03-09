@@ -2,17 +2,24 @@ from flask import Flask, render_template, jsonify
 import requests
 import numpy as np
 import tensorflow as tf
+import os
 
 app = Flask(__name__)
 
 BINANCE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+PROXY_URL = "https://api.allorigins.win/raw?url="  # ✅ Free proxy to bypass Binance restrictions
 
-# 📌 Function to fetch live BTC price
+# 📌 Function to fetch live BTC price using a proxy
 def get_live_btc_price():
-    response = requests.get(BINANCE_URL)
-    if response.status_code == 200:
-        return float(response.json()["price"])  # Convert string to float
-    return None
+    try:
+        proxy_request = PROXY_URL + BINANCE_URL  # ✅ Use proxy to access Binance
+        headers = {"User-Agent": "Mozilla/5.0"}  # ✅ Helps avoid blocking
+        response = requests.get(proxy_request, headers=headers, timeout=10)
+        response.raise_for_status()  # ✅ Raise error for HTTP failures
+        return float(response.json()["price"])
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error fetching BTC price via proxy: {e}")
+        return None
 
 # 📌 Function to predict next 1-minute BTC price
 def predict_next_minute_price(current_price):
@@ -50,20 +57,18 @@ def predict_btc_price():
 def home():
     return render_template("index.html")
 
-# 📌 Debug Route for Binance API (Add this before running Flask)
+# 📌 Debug Route for Binance API (Helps Check API Response on Hosting)
 @app.route("/debug/binance")
 def debug_binance():
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}  # ✅ Helps bypass certain blocks
-        response = requests.get(BINANCE_URL, headers=headers, timeout=10)  # ✅ Set timeout
+        proxy_request = PROXY_URL + BINANCE_URL  # ✅ Use proxy to access Binance
+        headers = {"User-Agent": "Mozilla/5.0"}  # ✅ Helps avoid blocking
+        response = requests.get(proxy_request, headers=headers, timeout=10)
         return jsonify(response.json())  # ✅ Return full Binance response
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500  # ✅ Show full error message
 
-import os
-
-# 🚀 Run Flask App (Works on Both Local & Railway)
+# 🚀 Run Flask App (Works for Both Local & Hosting Services)
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # ✅ Railway assigns a dynamic port
-    app.run(host="0.0.0.0", port=port, debug=True)  # ✅ Works locally & on Railway
-
+    port = int(os.environ.get("PORT", 8080))  # ✅ Railway or Render assigns a dynamic port
+    app.run(host="0.0.0.0", port=port, debug=True)
