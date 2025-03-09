@@ -50,6 +50,16 @@ def predict_btc_price():
 def home():
     return render_template("index.html")
 
+# 📌 Debug Route for Binance API (Add this before running Flask)
+@app.route("/debug/binance")
+def debug_binance():
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}  # ✅ Helps bypass certain blocks
+        response = requests.get(BINANCE_URL, headers=headers, timeout=10)  # ✅ Set timeout
+        return jsonify(response.json())  # ✅ Return full Binance response
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 500  # ✅ Show full error message
+
 import os
 
 # 🚀 Run Flask App (Works on Both Local & Railway)
